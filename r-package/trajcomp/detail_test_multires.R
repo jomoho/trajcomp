@@ -2,8 +2,8 @@
 traj <- psplit[[24]]
 
 dp<- DouglasPeucker(as.matrix(traj), 32)
-psd<- persistence_dist(as.matrix(traj),3, 1, 2)
-psm<- persistence_multires(as.matrix(traj),5, 7)
+psd<- PersistenceSDS(as.matrix(traj),3, 1, 2)
+psm<- PersistenceMRS(as.matrix(traj),5, 7)
 psb<- persistence_pruned(as.matrix(traj),3)
 
 plot(traj$x,traj$y, col="yellow")
@@ -34,8 +34,8 @@ for(i in 1:112){
   traj <- psplit[[i]]
   
   dp<- DouglasPeucker(as.matrix(traj), 32)
-  psd<- persistence_dist(as.matrix(traj),5, 32, 3)
-  psm<- persistence_multires(as.matrix(traj),5, 7)
+  psd<- PersistenceSDS(as.matrix(traj),5, 32, 3)
+  psm<- PersistenceMRS(as.matrix(traj),5, 7)
   psb<- persistence_pruned(as.matrix(traj),5)
   
   if(length(psm)> 2){

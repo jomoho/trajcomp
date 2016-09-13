@@ -66,8 +66,8 @@ analyze_dataset <-function(trajectories, title, ignore, param)
     traj <- trajectories[[i]]
     
     #dp<-DouglasPeucker(as.matrix(traj), epsilon)
-    dp<- persistence_multires(as.matrix(traj),beta, levels)
-    ps<- persistence_dist(as.matrix(traj),beta, 4, 2)
+    dp<- PersistenceMRS(as.matrix(traj),beta, levels)
+    ps<- PersistenceSDS(as.matrix(traj),beta, 4, 2)
     
     if(length(ps) >= 2 && length(dp) >= 2 && !(i %in% ignore)){
       dp_dist <-  distance_vector_ddply(as.matrix(dp),as.matrix(traj),handle)

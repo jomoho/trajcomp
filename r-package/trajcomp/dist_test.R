@@ -39,18 +39,20 @@ get_distances <- function(fn, tr, handle, ...){
 handle = compileSettings(
   tgroup(
     tdistance("discrete_hausdorff"),
-    tdistance("dtw") #,  tdistance("discrete_frechet")
+    tdistance("dtw"),
+    tdistance("closest_pair"),
+    tdistance("sum_of_pairs") #,tdistance("discrete_frechet")
   ));
 
 len_len <- get_len_len(psplit)
 psp_len <- get_lengths(persistence_pruned, psplit, 16)
-psm_len <- get_lengths(persistence_multires, psplit, 8, 7)
-psd_len <- get_lengths(persistence_dist, psplit, 5,32, 2)
+psm_len <- get_lengths(PersistenceMRS, psplit, 8, 7)
+psd_len <- get_lengths(PersistenceSDS, psplit, 5,32, 2)
 dp_len <- get_lengths(DouglasPeucker, psplit, 32)
 
 psp_dst <- get_distances(persistence_pruned, psplit, handle, 16)
-psm_dst <- get_distances(persistence_multires, psplit, handle, 8, 7)
-psd_dst <- get_distances(persistence_dist, psplit, handle, 5,32, 2)
+psm_dst <- get_distances(PersistenceMRS, psplit, handle, 8, 7)
+psd_dst <- get_distances(PersistenceSDS, psplit, handle, 5,32, 2)
 dp_dst <- get_distances(DouglasPeucker, psplit, handle, 32)
 
 plot(sort(dp_len), ylim=c(0,30), cex=1.7)
@@ -65,8 +67,11 @@ legend('topleft',
        bty="n")
 
 
-hau <- c(TRUE, FALSE)
-dtw <- c(FALSE, TRUE)
+hau <- c(TRUE, FALSE, FALSE, FALSE)
+dtw <- c(FALSE, TRUE, FALSE, FALSE)
+
+cpair <- c(FALSE, FALSE, TRUE, FALSE)
+spair <- c(FALSE, FALSE, FALSE, TRUE)
 
 plot(sort(psm_dst[hau]), 
      ylim=c(0, 700), 
@@ -118,6 +123,20 @@ lines(sort(dp_dst[hau]*dp_len), col="black")
 lines(sort(psd_dst[hau]*psd_len), col="blue")
 lines(sort(psm_dst[hau]*psm_len), col="red",)
 lines(sort(psp_dst[hau]*psp_len), col="green")
+legend('topleft', 
+       c("DP", "PS D", "PS MR", "PS PRU"), 
+       col = c("black", "blue", "red", "green"), 
+       lty = c(), 
+       pch = c(1,1,1,1), 
+       bty="n")
+
+plot(sort(dp_dst[cpair]),
+     ylim=c(-10, 10), 
+     cex=0.7, main="closest pair", type="n")
+lines(sort(dp_dst[cpair]), col="black")
+lines(sort(psd_dst[cpair]), col="blue")
+lines(sort(psm_dst[cpair]), col="red",)
+lines(sort(psp_dst[cpair]), col="green")
 legend('topleft', 
        c("DP", "PS D", "PS MR", "PS PRU"), 
        col = c("black", "blue", "red", "green"), 
