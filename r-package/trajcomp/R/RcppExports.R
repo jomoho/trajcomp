@@ -17,6 +17,10 @@ persistence_pruned <- function(T, Beta = 0L, it = -1L) {
     .Call('trajcomp_persistence_pruned', PACKAGE = 'trajcomp', T, Beta, it)
 }
 
+persistence_pruned_ppp <- function(T, Beta = 0L, it = -1L) {
+    .Call('trajcomp_persistence_pruned_ppp', PACKAGE = 'trajcomp', T, Beta, it)
+}
+
 persistence_comps <- function(T, Beta = 0L, it = -1L) {
     .Call('trajcomp_persistence_comps', PACKAGE = 'trajcomp', T, Beta, it)
 }

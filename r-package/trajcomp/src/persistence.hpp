@@ -91,6 +91,7 @@ void print_curve(Curve &c){
   }
   
 }
+
 Curve traj_to_curve(const std::vector<vec2> &t){
   auto res = Curve(t.size());
   
@@ -432,7 +433,6 @@ Curve prune_curve_dist_to_segment(const Curve &curve, double epsilon){
   return res;
 }
 
-
 void recalc_angles_inplace(Curve &curve){
   for(auto i = 0; i < curve.size(); ++i){
     //edge cases
@@ -505,6 +505,320 @@ Curve persistenceDist(const Curve &curve,  double beta, double epsilon, int iter
 
 }//*** END OF NAMESPACE PERSISTENCE ***//
 
+
+namespace ppp{
+
+//basic vector math
+typedef std::vector<double> vec2;
+typedef std::vector<vec2> Trajectory;
+
+double length_sqr(const vec2 & v){
+  return v[0] * v[0] + v[1] * v[1];
+}
+double length(const vec2 & v){
+  return sqrt(length_sqr(v));
+}
+
+double dot(const vec2 & v, const vec2 & w){
+  return v[0] * w[0] + v[1] * w[1];
+}
+
+//positive if v is left of w negative else
+double left_right(const vec2 & v, const vec2 & w){
+  return v[0] * w[1] - v[1] * w[0];
+}
+
+//1.0 if v is left of w -1 else
+double lr_sgn(const vec2 & v, const vec2 & w){
+  return (left_right(v, w) < 0) ? -1.0: 1.0;
+}
+
+double to_deg(double rad){
+  return (rad * 180.0) / M_PI;
+}
+
+vec2 mult(const vec2 & v, double x){
+  return {v[0] * x, v[1] * x};
+}
+
+void normalize(vec2 & v){
+  auto len = length(v);
+  if(len != 0){
+    v[0] *= 1/len;
+    v[1] *= 1/len;
+  }
+}
+
+vec2 diff(const vec2 & v, const vec2 & w){
+  return {v[0] - w[0], v[1] - w[1]};
+}
+vec2 sum(const vec2 & v, const vec2 & w){
+  return {v[0] + w[0], v[1] + w[1]};
+}
+
+double distance(const vec2 & v, const vec2 & w){
+  return length(diff(v,w));
+}
+
+struct CurveElement{
+  double val;
+  int index;
+  int comp_index;
+  vec2 vertex;
+};
+typedef std::vector<CurveElement> Curve;
+
+struct Extrema{
+  std::vector<int> min, max, used;
+  std::set<int> max_set;
+};
+
+struct Component{
+  int left, right;
+  int min, max;
+  int index;
+  bool finished;
+};
+
+struct Result{
+  std::vector<Component> comps;
+  Curve pruned;
+};
+
+Curve traj_to_curve(const std::vector<vec2> &t){
+  auto res = Curve(t.size());
+  
+  for(auto i = 0; i < t.size(); ++i){
+    //edge cases
+    if(i == 0 || i == t.size()-1){
+      res[i] = {0, i, -1, t[i]};
+    }else{
+      auto v = t[i];
+      auto last = t[i-1];
+      auto v1 = diff(last, v);
+      auto next = t[i+1];
+      auto v2 = diff(v, next);
+      
+      auto len1 = length(v1);
+      v1[0] *= 1/len1;
+      v1[1] *= 1/len1;
+      
+      auto len2 = length(v2);
+      v2[0] *= 1/len2;
+      v2[1] *= 1/len2;
+      
+      auto value = dot(v1, v2);
+      auto deg = to_deg( acos(value) * lr_sgn(v1, v2) );
+      if(len1 == 0 || len2 == 0){
+        deg = 0;
+      }
+      res[i] = {deg, i, -1, t[i]};
+      
+      //std::cout << i<<": "<<v1[0]<<", "<<v1[1] <<" | "<<v2[0]<<", "<<v2[1] <<" | "<<deg<<std::endl;
+    }
+  }
+  return res;
+};
+
+Extrema find_extrema(const Curve &curve){
+  
+  const int fl_un = 0, fl_min = 1, fl_max = 2;
+  Extrema res;
+  
+  auto d_min = curve[0], d_max = curve[0];
+  auto search = fl_un;
+  auto i_un = 0;
+  
+  for(auto i = 1; i < curve.size(); ++i){
+    auto x = curve[i];
+    if(search == fl_un){
+      if(x.val > d_min.val){
+        search = fl_max;
+        d_max = x;
+        res.min.push_back(i_un);
+      }
+      if(x.val < d_min.val){
+        search = fl_min;
+        d_min = x;
+        res.max.push_back(i_un);
+      }
+    } else if(search == fl_min){
+      if(x.val > d_min.val){
+        search = fl_max;
+        d_max = x;
+        res.min.push_back(i-1);
+      }else{
+        d_min = x;
+      }
+    } else if(search == fl_max){
+      if(x.val < d_max.val){
+        search = fl_min;
+        d_min = x;
+        res.max.push_back(i-1);
+      }else{
+        d_max = x;
+      }
+    }
+  }
+  
+  //if no min or max found
+  if(res.min.size() == 0 || res.max.size() == 0){
+    res.min.push_back(0);
+    res.max.push_back(curve.size()-1);
+  }else{
+    //add end, its either min or max
+    if(res.min.back() > res.max.back()){
+      res.max.push_back(curve.size()-1);
+    }else{
+      res.min.push_back(curve.size()-1);
+    }
+  }
+  
+  res.used = std::vector<int>(curve.size());
+  std::fill(res.used.begin(), res.used.end(), -1);
+  
+  res.max_set = std::set<int>(res.max.begin(), res.max.end());
+  
+  return res;
+}
+
+std::vector<Component> setup_components(const Extrema &extrema, Curve & curve){
+  auto components = std::vector<Component>();
+  int index = 0;
+  for(auto m:extrema.min){
+    curve[m].comp_index = index;
+    components.push_back({m, m, m, -1, index, false});
+    ++index;
+  }
+  return components;
+}
+
+int grow_component(Component & active_comp, const Curve &curve){
+  auto l = active_comp.left - 1;
+  auto r = active_comp.right + 1;
+  
+  //decide grow direction
+  int x = 0;
+  if((curve[l].val < curve[r].val || r == curve.size())  && l != -1  ){
+    active_comp.left = l;
+    x = l;
+  }else{
+    active_comp.right = r;
+    x = r;
+  }
+  
+  if(x== -1){
+    x=0;
+  }
+  if(x == curve.size()){
+    x = curve.size()-1;
+  }
+  return x;
+}
+
+bool is_max(int index , const Extrema & extrema){
+  return extrema.max_set.count(index) > 0 ;
+}
+bool is_collision(int index, const Extrema & extrema){
+  return extrema.used[index] != -1;
+}
+Curve betaPruning( const std::vector<Component> &components, const Extrema &extrema,const Curve &curve, double beta){
+  Curve result;
+  for(auto m: extrema.min){
+    auto & comp = components[curve[m].comp_index];
+    //prune everything below beta
+    if( (curve[comp.max].val - curve[comp.min].val) >= beta){
+      
+      //generate new curve with correctly sorted elements
+      if(comp.max > comp.min){
+        result.push_back(curve[comp.min]);
+        result.push_back(curve[comp.max]);
+      }else {
+        result.push_back(curve[comp.max]);
+        result.push_back(curve[comp.min]);
+      }
+    }
+      
+  };
+  return result;
+}
+
+void merge_collision(std::vector<Component> &components, const Extrema &extrema, Curve &curve,
+                            Component &active_comp, int grow_index){
+
+    auto & c2 = components[extrema.used[grow_index]];
+    auto m1 = active_comp.min;
+    auto m2 = c2.min;
+    if (c2.min > active_comp.min){
+      m1 = c2.min;
+      m2 = active_comp.min;
+    }
+    
+    c2.left = std::min(active_comp.left, c2.left);
+    c2.right = std::max(active_comp.right, c2.right);
+    c2.min = m2;
+    c2.max = -1;
+    c2.finished = false;
+    
+    active_comp.left = std::min(grow_index, m1);
+    active_comp.right = std::max(grow_index, m1);
+    active_comp.min = m1;
+    
+    curve[grow_index].comp_index = active_comp.index;
+    
+}
+int next_component(const Component & active_comp, const std::vector<Component> & components){
+  for(auto i = 0; i < components.size(); ++i){
+    auto index = (i+active_comp.index+1) % components.size();
+    
+    if(components[index].finished == true){
+      return index;
+    }
+  }
+  return -1;
+}
+
+void mark_max_used(Component &active_comp,Extrema &extrema){
+  extrema.used[active_comp.index];
+}
+
+Curve Persistence(Curve &curve, double beta){
+  auto extrema = find_extrema(curve);
+  auto components = setup_components(extrema, curve);
+
+  bool finished = false; 
+  auto &active_comp = components[0];
+  
+  while (! finished){
+    auto grow_index = grow_component(active_comp, curve);
+
+    if(is_max(grow_index, extrema)){
+      active_comp.finished = true;
+      active_comp.max = grow_index;
+
+      if(is_collision(grow_index, extrema)){
+        merge_collision(components, extrema, curve, active_comp, grow_index);
+      }
+      mark_max_used(active_comp, extrema);
+    }
+
+    auto next = next_component(active_comp, components);
+    if(next >= 0){
+      active_comp = components[next];
+    }else{
+      finished = true;
+    }
+
+    if(active_comp.left == 0 && active_comp.right == curve.size()-1){
+      finished = true;
+    }
+  }
+
+  return betaPruning(components, extrema, curve, beta);
+}
+
+
+}////////////////PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
 // [[Rcpp::export]]
 NumericVector persistence_curve(NumericMatrix T) {
   std::vector<std::vector<double>> trajectory,query;
@@ -580,6 +894,33 @@ NumericMatrix persistence_pruned(NumericMatrix T, NumericVector Beta = 0,  Numer
      }
      */
     NumericVector temp  =  wrap(p_result.pruned[i].vertex);
+    resultMatrix(i,_) = temp;
+  }
+  return resultMatrix;
+}
+
+// [[Rcpp::export]]
+NumericMatrix persistence_pruned_ppp(NumericMatrix T, NumericVector Beta = 0,  NumericVector it = -1) {
+  persistence::Trajectory trajectory;
+  
+  for (size_t i=0; i < T.nrow(); i++)		//@todo: remove copy by an adapter class @Martin
+    trajectory.push_back({T(i,0),T(i,1)});
+  
+  auto curve = ppp::traj_to_curve(trajectory);
+  auto p_result = ppp::Persistence(curve, Beta(0));
+  
+  NumericMatrix resultMatrix = NumericMatrix(p_result.size(), 2) ;
+  
+  for(int i = 0; i <p_result.size(); i++){
+    /*
+     if(p_result[i].vertex.size() == 2){
+     std::cout << "v["<<i<<"]: "<< p_result[i].vertex[0] <<", "<<p_result[i].vertex[1] << std::endl;
+     }
+     else{
+     std::cout << "v["<<i<<"]: EMPTY!"<< p_result[i].vertex.size()<<" - " << p_result[i].index << std::endl;
+     }
+     */
+    NumericVector temp  =  wrap(p_result[i].vertex);
     resultMatrix(i,_) = temp;
   }
   return resultMatrix;
